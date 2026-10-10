@@ -1,0 +1,31 @@
+name: threads-post
+on:
+  schedule:
+    - cron: '*/10 * * * *'    # 10分ごとに見に行く（GitHubの都合で遅れることがある）
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: threads-post
+  cancel-in-progress: false
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: post
+        run: python3 post.py
+        env:
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+      - name: save
+        if: always()
+        run: |
+          git config user.name "threads-post-bot"
+          git config user.email "threads-post-bot@users.noreply.github.com"
+          git add done.json
+          if ! git diff --cached --quiet; then
+            git commit -m "記録"
+            git pull --rebase
+            git push
+          fi
