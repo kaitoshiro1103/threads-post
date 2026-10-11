@@ -1,1 +1,6 @@
-{}
+{
+ "20261011-2000": {
+  "error": "Threadsが断りました（400）: {\"error\":{\"message\":\"Invalid parameter\",\"type\":\"OAuthException\",\"code\":100,\"error_subcode\":4279004,\"is_transient\":false,\"error_user_title\":\"Invalid Carousel Children\",\"error_user_msg\":\"The children with IDs 17989337589099050 are invalid, nonexistent, or expired.\",\"fbtrace_id\":\"AB",
+  "tries": 1
+ }
+}
