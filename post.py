@@ -164,8 +164,8 @@ def main():
             bad += 1
             d['error'] = str(ex)[:300]
             d['tries'] = d.get('tries', 0) + 1
-            if d['tries'] >= 3:
-                d['skipped'] = '3回失敗したのでやめました'
+            if d["tries"] >= 5:
+                d['skipped'] = '5回失敗したのでやめました'
             print('✕ 失敗 %s: %s' % (e['id'], d['error']))
         save_done(done)
     return 1 if bad else 0
