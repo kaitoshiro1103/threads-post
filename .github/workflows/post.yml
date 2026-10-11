@@ -1,7 +1,9 @@
 name: threads-post
 on:
   schedule:
-    - cron: '*/10 * * * *'    # 10分ごとに見に行く（GitHubの都合で遅れることがある）
+    # 10分ごとに見に行く。GitHubのタイマーは混む時刻（毎時0分など）に遅れたり飛ばされたりするので、
+    # きりのよい分を避けて 3分・13分・23分… にしてある（2026年10月11日、*/10 では6時間で1回しか動かなかった）
+    - cron: '3,13,23,33,43,53 * * * *'
   workflow_dispatch:
 permissions:
   contents: write
