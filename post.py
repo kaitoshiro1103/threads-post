@@ -58,19 +58,20 @@ def save_done(done):
         json.dump(done, f, ensure_ascii=False, indent=1)
 
 
-def wait_ready(cid):
+def wait_ready(cid, first=WAIT):
     """入れ物の準備が終わるまで待つ。状態が取れないときは決まった秒数だけ待つ"""
-    time.sleep(WAIT)
-    for _ in range(6):
+    time.sleep(first)
+    for _ in range(18):
         try:
             st = call('GET', cid, fields='status,error_message')
         except RuntimeError:
+            time.sleep(max(WAIT - first, 0))
             return
         if st.get('status') in (None, 'FINISHED', 'PUBLISHED'):
             return
-        if st.get('status') == 'ERROR':
+        if st.get('status') in ('ERROR', 'EXPIRED'):
             raise RuntimeError('画像を受け取れませんでした: %s' % st.get('error_message'))
-        time.sleep(10)
+        time.sleep(5)
 
 
 def publish(uid, cid):
@@ -97,6 +98,10 @@ def post_main(uid, e):
     else:
         kids = [call('POST', '%s/threads' % uid, media_type='IMAGE', image_url=u,
                      is_carousel_item='true')['id'] for u in imgs]
+        # 1枚ずつの準備が終わってから、まとめの入れ物を作る。待たずに作ると
+        # 「Invalid Carousel Children」で断られる（2026年10月11日、最初の本番で発生）
+        for k in kids:
+            wait_ready(k, first=5)
         cid = call('POST', '%s/threads' % uid, media_type='CAROUSEL', children=','.join(kids),
                    text=text)['id']
     return publish(uid, cid)
