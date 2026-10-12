@@ -5,7 +5,7 @@ post.py — 予約した投稿を、時刻が来たら Threads に出す（GitHu
   queue.json … 予約のリスト（Macで書いて送る。ここでは読むだけ）
   done.json  … 出し終わった記録（ここだけが書く）
 
-1件の流れ: 画像の入れ物を作る → まとめて1つの投稿にする → 公開 → その投稿にリプ（リンクと #PR）を付ける。
+1件の流れ: 画像つきの投稿を出す → その投稿にリプ（リンク。画像も付けられる）を付ける。
 途中で失敗しても、次の回に「続きから」やり直す（同じ投稿を2回出さない）。
 
 公式の説明: https://developers.facebook.com/docs/threads/posts/
@@ -13,6 +13,7 @@ post.py — 予約した投稿を、時刻が来たら Threads に出す（GitHu
 import datetime
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.error
@@ -26,6 +27,11 @@ QUEUE = os.path.join(HERE, 'queue.json')
 DONE = os.path.join(HERE, 'done.json')
 LATE_LIMIT_H = 6      # 予定から6時間を過ぎた予約は出さない（タイマーが止まっていた後に、古い予約がまとめて出るのを防ぐ）
 WAIT = 30             # 入れ物を作ってから公開するまで待つ秒数（公式の目安）
+# GitHubのタイマーは数時間に1回しか動かないことがある（2026年10月11〜12日は3〜6時間おきだった）。
+# そこで、動いたときに「あと少しで時刻が来る予約」があれば、その時刻まで中で待ってから出す。
+# 待てるのは1回の実行につき5時間半まで（GitHubの1回の上限が6時間のため）
+WAIT_MAX_MIN = 330
+WAIT_FOR_DUE = os.environ.get('WAIT_FOR_DUE') == '1'
 TOKEN = os.environ.get('THREADS_TOKEN', '')
 DRY = os.environ.get('DRY_RUN') == '1'
 
@@ -88,13 +94,15 @@ def image_url(p):
         urllib.parse.quote(p))
 
 
-def post_main(uid, e):
-    imgs = [image_url(p) for p in e.get('images') or []]
-    text = e.get('text') or ''
+def make_post(uid, text, images, reply_to=None):
+    """投稿を1つ出す。reply_to を渡すと、その投稿へのリプになる（リプにも画像を付けられる）"""
+    imgs = [image_url(p) for p in images or []]
+    extra = {'reply_to_id': reply_to} if reply_to else {}
     if not imgs:
-        cid = call('POST', '%s/threads' % uid, media_type='TEXT', text=text)['id']
+        cid = call('POST', '%s/threads' % uid, media_type='TEXT', text=text, **extra)['id']
     elif len(imgs) == 1:
-        cid = call('POST', '%s/threads' % uid, media_type='IMAGE', image_url=imgs[0], text=text)['id']
+        cid = call('POST', '%s/threads' % uid, media_type='IMAGE', image_url=imgs[0], text=text,
+                   **extra)['id']
     else:
         kids = [call('POST', '%s/threads' % uid, media_type='IMAGE', image_url=u,
                      is_carousel_item='true')['id'] for u in imgs]
@@ -103,16 +111,47 @@ def post_main(uid, e):
         for k in kids:
             wait_ready(k, first=5)
         cid = call('POST', '%s/threads' % uid, media_type='CAROUSEL', children=','.join(kids),
-                   text=text)['id']
+                   text=text, **extra)['id']
     return publish(uid, cid)
 
 
-def post_reply(uid, parent, text):
-    cid = call('POST', '%s/threads' % uid, media_type='TEXT', text=text, reply_to_id=parent)['id']
-    return publish(uid, cid)
+def pull():
+    """GitHubの上で動いているときだけ、最新の予約を取り直す（待っている間に本人が直したり消したりするため）"""
+    if os.environ.get('GITHUB_ACTIONS'):
+        subprocess.run(['git', 'pull', '-q', '--rebase'], cwd=HERE, capture_output=True)
+
+
+def pending_times():
+    """まだ出していない予約の時刻"""
+    done = load(DONE, {})
+    out = []
+    for e in load(QUEUE, []):
+        d = done.get(e['id'], {})
+        if not (d.get('finished') or d.get('skipped')):
+            out.append(datetime.datetime.strptime(e['time'], '%Y-%m-%d %H:%M').replace(tzinfo=JST))
+    return out
+
+
+def wait_for_due():
+    """時刻が来た予約があればすぐ戻る。5時間半以内に来る予約があれば、その時刻まで待つ"""
+    start = time.time()
+    while True:
+        pull()
+        now = datetime.datetime.now(JST)
+        times = pending_times()
+        if not times or min(times) <= now:
+            return
+        left = WAIT_MAX_MIN * 60 - (time.time() - start)
+        gap = (min(times) - now).total_seconds()
+        if gap > left:
+            return
+        print('次の予約（%s）まで待ちます' % min(times).strftime('%m/%d %H:%M'), flush=True)
+        time.sleep(min(300, max(gap, 1)))     # 5分ごとに予約を見直す
 
 
 def main():
+    if WAIT_FOR_DUE and not DRY:
+        wait_for_due()
     now = datetime.datetime.now(JST)
     queue = load(QUEUE, [])
     done = load(DONE, {})
@@ -147,12 +186,13 @@ def main():
         d = done.setdefault(e['id'], {})
         try:
             if not d.get('post_id'):
-                d['post_id'] = post_main(uid, e)
+                d['post_id'] = make_post(uid, e.get('text') or '', e.get('images'))
                 d['posted_at'] = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M')
                 save_done(done)       # ここで必ず残す（リプで失敗しても、投稿を2回出さないため）
                 print('○ 投稿しました %s' % e['id'])
-            if e.get('reply') and not d.get('reply_id'):
-                d['reply_id'] = post_reply(uid, d['post_id'], e['reply'])
+            if (e.get('reply') or e.get('reply_images')) and not d.get('reply_id'):
+                d['reply_id'] = make_post(uid, e.get('reply') or '', e.get('reply_images'),
+                                          reply_to=d['post_id'])
                 print('○ リプを付けました %s' % e['id'])
             d['finished'] = True
             d.pop('error', None)
@@ -168,6 +208,14 @@ def main():
                 d['skipped'] = '5回失敗したのでやめました'
             print('✕ 失敗 %s: %s' % (e['id'], d['error']))
         save_done(done)
+    # このあと5時間半以内にまだ予約があるなら、もう1回動かしてもらう（workflow が見る印）
+    soon = [t for t in pending_times()
+            if t - datetime.datetime.now(JST) < datetime.timedelta(minutes=WAIT_MAX_MIN)]
+    # 失敗してまだやり直せる予約があるときも、すぐもう1回動かす（次のタイマーを待つと、リプが何時間も付かない）
+    retry = [k for k, d in done.items() if d.get('error') and not d.get('skipped') and not d.get('finished')]
+    if (soon or retry) and os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write('again=1\n')
     return 1 if bad else 0
 
 

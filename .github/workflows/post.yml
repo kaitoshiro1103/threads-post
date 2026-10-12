@@ -2,24 +2,28 @@ name: threads-post
 on:
   schedule:
     # 10分ごとに見に行く。GitHubのタイマーは混む時刻（毎時0分など）に遅れたり飛ばされたりするので、
-    # きりのよい分を避けて 3分・13分・23分… にしてある（2026年10月11日、*/10 では6時間で1回しか動かなかった）
+    # きりのよい分を避けて 3分・13分・23分… にしてある。それでも実際は3〜6時間に1回しか動かなかった
+    # （2026年10月11〜12日）。そのため post.py が「時刻が近い予約」を中で待つようにしてある
     - cron: '3,13,23,33,43,53 * * * *'
-  workflow_dispatch:
+  workflow_dispatch:          # 「送信」を押すと、最後にこれで1回動かす（近い予約があれば時刻まで待つ）
 permissions:
   contents: write
+  actions: write
 concurrency:
   group: threads-post
   cancel-in-progress: false
 jobs:
   post:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
       - name: post
+        id: post
         run: python3 post.py
         env:
           THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+          WAIT_FOR_DUE: '1'
       - name: save
         if: always()
         run: |
@@ -31,3 +35,8 @@ jobs:
             git pull --rebase
             git push
           fi
+      - name: again
+        if: always() && steps.post.outputs.again == '1'
+        run: gh workflow run threads-post --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
