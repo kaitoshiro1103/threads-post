@@ -18,7 +18,7 @@ news.json の形（1件＝1ニュース。並び順＝大事な順）:
                 "画像": "素材/daiya.jpg",    # このファイルからの相対パス
                 "権利": "©…"}]}
 
-ストーリーに入るのはランクAだけ・3枚まで（2026年11月17日の本人の指示）。Threadsは全部出す。
+ストーリーに入るのはランクAだけ・3枚まで・子ども向け（"子ども向け": true）は除く（2026年11月17日の本人の指示）。Threadsは全部出す。
 画面は開かない。フォントは fonts/ の しっぽり明朝（OFL）だけを使うので、クラウドでも同じ絵になる。
 """
 import argparse
@@ -223,7 +223,7 @@ def main():
     date_label = '%d/%d' % (int(m), int(dd))
     os.makedirs(a.out, exist_ok=True)
 
-    picks = [i for i in items if i.get('ランク') in STORY_RANKS][:STORY_MAX]
+    picks = [i for i in items if i.get('ランク') in STORY_RANKS and not i.get('子ども向け')][:STORY_MAX]   # 子ども向けはストーリーに入れない（11/17の指示）
     warn = []
     for n, item in enumerate(picks, 1):
         out = story(item, date_label, n, len(picks), os.path.join(a.out, 'story_%d.jpg' % n), warn)
