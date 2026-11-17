@@ -193,7 +193,7 @@ def story(item, date_label, page, total, out, warn):
 
 
 def threads_text(item):
-    """Threadsの本文。ひとこと（1人のアニメ好きの声）→事実→問いかけ→出典 の順（2026/11/17に変更。
+    """Threadsの本文。ひとこと（1人のアニメ好きの声）→事実→問いかけ の順（出典は書かない。11/17の指示）（2026/11/17に変更。
     Threadsで伸びているのは、話しかけて答えたくなる投稿。お知らせの形は見られなかった）"""
     parts = []
     if item.get('ひとこと'):
@@ -204,7 +204,6 @@ def threads_text(item):
         parts += ['', item['補足']]
     if item.get('問いかけ'):
         parts += ['', item['問いかけ']]
-    parts += ['', '出典：%s' % item['出典']]
     return '\n'.join(parts)
 
 
