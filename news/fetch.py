@@ -49,7 +49,8 @@ def cmd_list(a):
             continue
         blocks = re.findall(r'<entry>(.*?)</entry>', t, re.S) or re.findall(r'<item>(.*?)</item>', t, re.S)
         if not blocks:
-            bad.append('%s: 新着が読めませんでした（形が変わったかもしれません）' % name)
+            head = re.sub(r'\s+', ' ', t[:200])
+            bad.append('%s: 新着が読めませんでした（%d字。先頭: %s）' % (name, len(t), head))
         for b in blocks:
             title = clean(re.search(r'<title[^>]*>(.*?)</title>', b, re.S).group(1))
             m = re.search(r'<(?:published|updated)>(.*?)<', b)
