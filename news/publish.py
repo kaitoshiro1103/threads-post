@@ -23,6 +23,7 @@ JST = datetime.timezone(datetime.timedelta(hours=9))
 # 出す時刻。ニュースは大事な順に並んでいるので、人が多い時刻から先に埋める。20時は1作品紹介の時刻なので使わない
 SLOTS = ['07:30', '12:15', '19:00', '21:00', '18:00', '08:30', '22:00', '17:00', '11:30', '13:30', '09:30', '15:00', '10:30']
 SUMMARY_SLOT = '22:30'
+TALK_SLOTS = ['12:30', '21:30']   # 「アニメ好きの1人」の話しかけ（昼休みと夜。ニュースの時刻とずらす）
 KEEP_DAYS = 14          # README に並べる日数
 
 
@@ -41,8 +42,9 @@ def settings():
 def plan(date):
     """その日のThreadsの投稿と時刻。もう過ぎた時刻は、今から10分後以降の空いている時刻へずらす"""
     posts = load(os.path.join(OUT, date, 'threads.json'), [])
-    news = [p for p in posts if p['作品'] != 'まとめ'][:len(SLOTS)]
+    news = [p for p in posts if p['作品'] not in ('まとめ', '話しかけ')][:len(SLOTS)]
     summary = [p for p in posts if p['作品'] == 'まとめ']
+    talks = [p for p in posts if p['作品'] == '話しかけ'][:len(TALK_SLOTS)]
     now = datetime.datetime.now(JST) + datetime.timedelta(minutes=10)
     free = [s for s in SLOTS if datetime.datetime.strptime('%s %s' % (date, s), '%Y-%m-%d %H:%M').replace(tzinfo=JST) > now]
     out = []
@@ -50,6 +52,9 @@ def plan(date):
         out.append((slot, p))
     if summary and len(news) >= 3:
         out.append((SUMMARY_SLOT, summary[0]))
+    for p, slot in zip(talks, TALK_SLOTS):
+        if datetime.datetime.strptime('%s %s' % (date, slot), '%Y-%m-%d %H:%M').replace(tzinfo=JST) > now:
+            out.append((slot, p))
     return sorted(out, key=lambda x: x[0])
 
 
@@ -97,7 +102,7 @@ def cmd_reserve(date):
         eid = 'news-%s-%s' % (date.replace('-', ''), slot.replace(':', ''))
         if eid in have:
             continue
-        entry = {'id': eid, 'time': '%s %s' % (date, slot), 'title': 'ニュース: %s' % p['作品'], 'text': p['本文']}
+        entry = {'id': eid, 'time': '%s %s' % (date, slot), 'title': '%s: %s' % ('話しかけ' if p['作品'] == '話しかけ' else 'ニュース', p['作品'] if p['作品'] != '話しかけ' else p['本文'].split('\n')[0][:20]), 'text': p['本文']}
         if p.get('画像'):
             dst = 'images/%s.jpg' % eid
             im = Image.open(os.path.join(HERE, p['画像'])).convert('RGB')

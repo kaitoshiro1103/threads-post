@@ -193,13 +193,17 @@ def story(item, date_label, page, total, out, warn):
 
 
 def threads_text(item):
-    """Threadsの本文。事実（要点）→ひとこと→出典 の順"""
-    parts = ['【%s】%s' % (item['札'], item['作品'].replace('\n', '')), '']
+    """Threadsの本文。ひとこと（1人のアニメ好きの声）→事実→問いかけ→出典 の順（2026/11/17に変更。
+    Threadsで伸びているのは、話しかけて答えたくなる投稿。お知らせの形は見られなかった）"""
+    parts = []
+    if item.get('ひとこと'):
+        parts += [item['ひとこと'], '']
+    parts += ['【%s】%s' % (item['札'], item['作品'].replace('\n', ''))]
     parts += ['・' + p for p in item.get('要点', [])]
     if item.get('補足'):
         parts += ['', item['補足']]
-    if item.get('ひとこと'):
-        parts += ['', item['ひとこと']]
+    if item.get('問いかけ'):
+        parts += ['', item['問いかけ']]
     parts += ['', '出典：%s' % item['出典']]
     return '\n'.join(parts)
 
@@ -233,6 +237,9 @@ def main():
 
     posts = [{'作品': i['作品'].replace('\n', ''), 'ランク': i.get('ランク'), '本文': threads_text(i), '画像': i.get('画像')} for i in items]
     posts.append({'作品': 'まとめ', 'ランク': '-', '本文': summary_text(items, date_label), '画像': None})
+    talks = data.get('話しかけ', [])
+    for t in talks:                                  # ニュースとは別の「アニメ好きの1人」の投稿（画像・リンクなし）
+        posts.append({'作品': '話しかけ', 'ランク': t.get('型', '-'), '本文': t['本文'].strip(), '画像': None})
     with open(os.path.join(a.out, 'threads.json'), 'w', encoding='utf-8') as f:
         json.dump(posts, f, ensure_ascii=False, indent=1)
     with open(os.path.join(a.out, 'threads.txt'), 'w', encoding='utf-8') as f:
@@ -241,6 +248,13 @@ def main():
                 n, post['ランク'], len(post['本文']), 'あり' if post['画像'] else 'なし', post['本文']))
     print('Threads: %d本（%s）' % (len(posts), os.path.join(a.out, 'threads.txt')))
     warn += ['%s: Threadsの本文が500字を超えています' % post['作品'] for post in posts if len(post['本文']) > 500]
+    warn += ['%s: 問いかけがありません（Threadsは問いかけで終える）' % i['作品'].replace('\n', '') for i in items if not i.get('問いかけ')]
+    warn += ['%s: ひとことがありません（Threadsは1人の声から始める）' % i['作品'].replace('\n', '') for i in items if not i.get('ひとこと')]
+    if len(talks) < 2:
+        warn.append('話しかけの投稿が%d本です（毎日2本）' % len(talks))
+    for t in talks:
+        if 'http' in t['本文'] or '#' in t['本文']:
+            warn.append('話しかけにリンクか＃が入っています: %s' % t['本文'][:20])
     for w in warn:
         print('▲ ' + w)
     return 1 if warn else 0
