@@ -292,7 +292,10 @@
   "url": "https://www.threads.com/@manga_31500/post/DgCvZkToCwc"
  },
  "news-20261122-2100": {
-  "error": "Threadsが断りました（400）: {\"error\":{\"message\":\"An unknown error occurred\",\"code\":1,\"type\":\"OAuthException\",\"error_subcode\":2207003,\"is_transient\":false,\"error_user_msg\":\"It takes too long to download the media.\",\"error_user_title\":\"Timeout\",\"fbtrace_id\":\"AI0l9zYLS3aG44tPGm8QjR8\"}}",
-  "tries": 1
+  "tries": 1,
+  "post_id": "18046863800832370",
+  "posted_at": "2026-11-22 21:01",
+  "finished": true,
+  "url": "https://www.threads.com/@manga_31500/post/DgCwXiMljsF"
  }
 }
